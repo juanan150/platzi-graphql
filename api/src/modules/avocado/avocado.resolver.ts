@@ -1,36 +1,46 @@
 import { createHash } from 'crypto'
-import { baseModelResolver } from '../base/base.resolver'
-import { Avocado } from './avocado.model'
+import { Avocado, Attributes, PrismaClient } from '@prisma/client'
 
-const avos: Avocado[] = [
-  {
-    createdAt: new Date(),
-    updatedAt: undefined,
-    deletedAt: undefined,
-    name: 'Test Avocado',
-    id: 'abc123',
-    sku: 'sku123',
-    price: 1.27,
-    image: '/images/pinkerton.jpg',
-    attributes: {
-      description: 'Avocado test description',
-      shape: 'Long pear',
-      hardiness: '-1 °C',
-      taste: 'Marvelous',
+type ResolverContext = {
+  orm: PrismaClient
+}
+
+type ArgType = {
+  id: string
+}
+
+export function findAll(
+  parent: unknown,
+  arg: unknown,
+  context: ResolverContext
+): Promise<Avocado[]> {
+  return context.orm.avocado.findMany({
+    include: {
+      attributes: true,
     },
-  },
-]
-
-export function findAll(): Avocado[] {
-  return avos
+  })
 }
 
-export function findOne(id: string): Avocado | null {
-  return avos[0]
+export function findOne(
+  parent: unknown,
+  { id }: ArgType,
+  context: ResolverContext
+): Promise<Avocado | null> {
+  return context.orm.avocado.findUnique({
+    where: { id: parseInt(id) },
+    include: {
+      attributes: true,
+    },
+  })
 }
 
-export const resolver: Record<keyof Avocado, (parent: Avocado) => unknown> = {
-  ...baseModelResolver,
+export const resolver: Record<
+  keyof (Avocado & { attributes: Attributes }),
+  (parent: Avocado & { attributes: Attributes }) => unknown
+> = {
+  createdAt: (parent) => parent.createdAt,
+  updatedAt: (parent) => parent.updatedAt,
+  deletedAt: (parent) => parent.deletedAt,
   id: (parent) => parent.id,
   sku: (parent) => parent.sku,
   name: (parent) => parent.name,
@@ -48,28 +58,24 @@ export function createAvo(
   parent: unknown,
   {
     data,
-  }: { data: Pick<Avocado, 'name' | 'price' | 'image'> & Avocado['attributes'] }
-): Avocado {
-  const currentLength = avos.length
-  const newAvo: Avocado = {
-    id: String(currentLength + 1),
-    sku: createHash('sha256')
-      .update(data.name, 'utf8')
-      .digest('base64')
-      .slice(-6),
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    deletedAt: undefined,
-    name: data.name,
-    price: data.price,
-    image: data.image,
-    attributes: {
-      description: data.description,
-      shape: data.shape,
-      hardiness: data.hardiness,
-      taste: data.taste,
+  }: { data: Pick<Avocado, 'name' | 'price' | 'image' | 'sku'> & Attributes },
+  context: ResolverContext
+): Promise<Avocado> {
+  const { name, price, image, sku, ...attributes } = data
+
+  console.log(attributes)
+
+  return context.orm.avocado.create({
+    data: {
+      name,
+      price,
+      image,
+      sku,
+      attributes: {
+        create: {
+          ...attributes,
+        },
+      },
     },
-  }
-  avos.push(newAvo)
-  return newAvo
+  })
 }
